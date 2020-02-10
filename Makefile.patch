@@ -1,0 +1,11 @@
+all: apply-patches
+
+clean: unapply-patches
+
+apply-patches:
+	./apply_patches.sh
+.PHONY: apply-patches
+
+unapply-patches:
+	git checkout .
+.PHONY: unapply-patches
