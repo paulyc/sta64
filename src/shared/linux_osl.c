@@ -932,7 +932,11 @@ osl_getcycles(void)
 	uint cycles;
 
 #if defined(__i386__)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 3, 0)
+	cycles = (u32)rdtsc();
+#else
 	rdtscl(cycles);
+#endif
 #else
 	cycles = 0;
 #endif 
@@ -942,7 +946,7 @@ osl_getcycles(void)
 void *
 osl_reg_map(uint32 pa, uint size)
 {
-	return (ioremap_nocache((unsigned long)pa, (unsigned long)size));
+	return (ioremap_cache((unsigned long)pa, (unsigned long)size));
 }
 
 void
