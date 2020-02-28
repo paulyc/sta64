@@ -1,4 +1,9 @@
+*.o
+*.a
+*.ko
 *.orig
 *.rej
-*.o
-*.ko
+.*.cmd
+wl.mod*
+Module.symvers
+modules.order
