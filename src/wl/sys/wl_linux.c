@@ -3351,14 +3351,14 @@ wl_proc_write(struct file *filp, const char __user *buff, size_t length, loff_t 
 	return length;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
-static const struct proc_ops wl_pops = {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+static const struct proc_ops wl_ops = {
 	.proc_read = wl_proc_read,
 	.proc_write = wl_proc_write,
 	
 };
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-static const struct file_operations wl_fops = {
+static const struct file_operations wl_ops = {
 	.owner	= THIS_MODULE,
 	.read	= wl_proc_read,
 	.write	= wl_proc_write,
@@ -3373,11 +3373,8 @@ wl_reg_proc_entry(wl_info_t *wl)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0)
 	if ((wl->proc_entry = create_proc_entry(tmp, 0644, NULL)) == NULL) {
 		WL_ERROR(("%s: create_proc_entry %s failed\n", __FUNCTION__, tmp));
-#elif LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
-	if ((wl->proc_entry = proc_create_data(tmp, 0644, NULL, &wl_fops, wl)) == NULL) {
-		WL_ERROR(("%s: proc_create_data %s failed\n", __FUNCTION__, tmp));
 #else
-	if ((wl->proc_entry = proc_create_data(tmp, 0644, NULL, &wl_pops, wl)) == NULL) {
+	if ((wl->proc_entry = proc_create_data(tmp, 0644, NULL, &wl_ops, wl)) == NULL) {
 		WL_ERROR(("%s: proc_create_data %s failed\n", __FUNCTION__, tmp));
 #endif
 		ASSERT(0);
