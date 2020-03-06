@@ -93,7 +93,11 @@ struct iw_statistics *wl_get_wireless_stats(struct net_device *dev);
 
 #include <wlc_wowl.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void wl_timer(struct timer_list *tl);
+#else
 static void wl_timer(ulong data);
+#endif
 static void _wl_timer(wl_timer_t *t);
 static struct net_device *wl_alloc_linux_if(wl_if_t *wlif);
 
@@ -582,7 +586,7 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 	}
 	wl->bcm_bustype = bustype;
 
-	if ((wl->regsva = ioremap_nocache(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
+	if ((wl->regsva = ioremap_cache(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
 		WL_ERROR(("wl%d: ioremap() failed\n", unit));
 		goto fail;
 	}
@@ -769,11 +773,13 @@ wl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_master(pdev);
 
 	pci_read_config_dword(pdev, 0x40, &val);
-	if ((val & 0x0000ff00) != 0)
+	if ((val & 0x0000ff00) != 0) {
+		// FIXME is this all supposed to be in a block? indended like so, but not blocked
 		pci_write_config_dword(pdev, 0x40, val & 0xffff00ff);
 		bar1_size = pci_resource_len(pdev, 2);
 		bar1_addr = (uchar *)ioremap_nocache(pci_resource_start(pdev, 2),
 			bar1_size);
+	}
 	wl = wl_attach(pdev->vendor, pdev->device, pci_resource_start(pdev, 0), PCI_BUS, pdev,
 		pdev->irq, bar1_addr, bar1_size);
 
@@ -2053,8 +2059,12 @@ wl_osl_pcie_rc(struct wl_info *wl, uint op, int param)
 void
 wl_dump_ver(wl_info_t *wl, struct bcmstrbuf *b)
 {
+#if defined(BCMDBG)
 	bcm_bprintf(b, "wl%d: %s %s version %s\n", wl->pub->unit,
 		__DATE__, __TIME__, EPI_VERSION_STR);
+#else
+	bcm_bprintf(b, "wl%d: version %s\n", wl->pub->unit, EPI_VERSION_STR);
+#endif
 }
 
 #if defined(BCMDBG)
@@ -2165,8 +2175,8 @@ wl_start(struct sk_buff *skb, struct net_device *dev)
 	wlif = WL_DEV_IF(dev);
 	wl = WL_INFO(dev);
 
+	skb->prev = NULL;
 	if (WL_ALL_PASSIVE_ENAB(wl) || (WL_RTR() && WL_CONFIG_SMP())) {
-		skb->prev = NULL;
 
 		TXQ_LOCK(wl);
 
@@ -2297,10 +2307,17 @@ wl_timer_task(wl_task_t *task)
 	atomic_dec(&t->wl->callbacks);
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+static void
+wl_timer(struct timer_list *tl)
+{
+	wl_timer_t *t = (wl_timer_t *)tl;
+#else
 static void
 wl_timer(ulong data)
 {
 	wl_timer_t *t = (wl_timer_t *)data;
+#endif
 
 	if (!WL_ALL_PASSIVE_ENAB(t->wl))
 		_wl_timer(t);
@@ -2352,9 +2369,13 @@ wl_init_timer(wl_info_t *wl, void (*fn)(void *arg), void *arg, const char *tname
 
 	bzero(t, sizeof(wl_timer_t));
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+	timer_setup(&t->timer, wl_timer, 0);
+#else
 	init_timer(&t->timer);
 	t->timer.data = (ulong) t;
 	t->timer.function = wl_timer;
+#endif
 	t->wl = wl;
 	t->fn = fn;
 	t->arg = arg;
@@ -2915,7 +2936,9 @@ wl_monitor(wl_info_t *wl, wl_rxsts_t *rxsts, void *p)
 	if (skb == NULL) return;
 
 	skb->dev = wl->monitor_dev;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
 	skb->dev->last_rx = jiffies;
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 22)
 	skb_reset_mac_header(skb);
 #else
@@ -2954,8 +2977,9 @@ _wl_add_monitor_if(wl_task_t *task)
 		goto done;
 	}
 
-	ASSERT(strlen(wlif->name) > 0);
-	strncpy(wlif->dev->name, wlif->name, strlen(wlif->name));
+	ASSERT(strnlen(wlif->name, sizeof(wlif->name)) > 0);
+	strncpy(wlif->dev->name, wlif->name, sizeof(wlif->dev->name));
+
 
 	wl->monitor_dev = dev;
 	if (wl->monitor_type == 1)

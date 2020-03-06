@@ -98,7 +98,8 @@ ifneq ($(KERNELRELEASE),)
       endif
     endif
   endif
-
+else
+  APIFNAL := CFG80211
 endif
 
 #Check GCC version so we can apply -Wno-date-time if supported.  GCC >= 4.9
@@ -129,23 +130,26 @@ ifeq ($(APIFINAL),WEXT)
   $(info Using Wireless Extension API)
 endif
 
-obj-m              += wl.o
+obj-$(CONFIG_WL)             += wl.o
 
 wl-objs            :=
-wl-objs            += src/shared/linux_osl.o
-wl-objs            += src/wl/sys/wl_linux.o
-wl-objs            += src/wl/sys/wl_iw.o
-wl-objs            += src/wl/sys/wl_cfg80211_hybrid.o
+wl-objs            += linux_osl.o
+wl-objs            += wl_linux.o
+wl-objs            += wl_iw.o
+wl-objs            += wl_cfg80211_hybrid.o
 
-EXTRA_CFLAGS       += -I$(src)/src/include -I$(src)/src/common/include
-EXTRA_CFLAGS       += -I$(src)/src/wl/sys -I$(src)/src/wl/phy -I$(src)/src/wl/ppr/include
-EXTRA_CFLAGS       += -I$(src)/src/shared/bcmwifi/include
+wl-y               := linux_osl.o wl_linux.o wl_iw.o wl_cfg80211_hybrid.o
+
+EXTRA_CFLAGS       :=
 #EXTRA_CFLAGS       += -DBCMDBG_ASSERT -DBCMDBG_ERR
 ifeq "$(GE_49)" "1"
 EXTRA_CFLAGS       += -Wno-date-time
 endif
 
-EXTRA_LDFLAGS      := $(src)/lib/wlc_hybrid.o_shipped
+#EXTRA_LDFLAGS      := $(src)/lib/wlc_hybrid.o_shipped
+wl-y += lib/wlc_hybrid.o
+ccflags-y   := $(EXTRA_CFLAGS)
+#ldflags-y   := $(EXTRA_LDFLAGS)
 
 KBASE              ?= /lib/modules/`uname -r`
 KBUILD_DIR         ?= $(KBASE)/build

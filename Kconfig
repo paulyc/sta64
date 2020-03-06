@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-2.0-only
+config WL
+	tristate "Broadcom 43xx sta64 driver"
+	depends on CFG80211
+	default m
+	---help---
+	  wl is a driver for the Broadcom 43xx series wireless devices.
