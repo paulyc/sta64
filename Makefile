@@ -164,5 +164,8 @@ cross:
 clean:
 	KBUILD_NOPEDANTIC=1 make -C $(KBUILD_DIR) M=`pwd` clean
 
-install:
+install: sign
 	install -D -m 755 wl.ko $(MDEST_DIR)
+
+sign: all
+	$(KBUILD_DIR)/scripts/sign-file sha512 $(KBUILD_DIR)/certs/signing_key.pem $(KBUILD_DIR)/certs/signing_key.x509 wl.ko
