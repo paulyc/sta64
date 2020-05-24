@@ -93,11 +93,13 @@ struct iw_statistics *wl_get_wireless_stats(struct net_device *dev);
 
 #include <wlc_wowl.h>
 
+static void wl_timer(
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
-static void wl_timer(struct timer_list *tl);
+		struct timer_list *tl
 #else
-static void wl_timer(ulong data);
+		ulong data
 #endif
+		);
 static void _wl_timer(wl_timer_t *t);
 static struct net_device *wl_alloc_linux_if(wl_if_t *wlif);
 
@@ -162,6 +164,8 @@ static void wl_report_radio_state(wl_info_t *wl);
 
 MODULE_LICENSE("MIXED/Proprietary");
 
+MODULE_LICENSE("MIXED/Proprietary");
+
 static struct pci_device_id wl_id_table[] =
 {
 	{ PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID, PCI_ANY_ID,
@@ -221,7 +225,7 @@ module_param(nompc, int, 0);
 #define to_str(s) #s
 #define quote_str(s) to_str(s)
 
-#define BRCM_WLAN_IFNAME eth%d
+#define BRCM_WLAN_IFNAME wlan%d
 
 static char intf_name[IFNAMSIZ] = quote_str(BRCM_WLAN_IFNAME);
 
@@ -586,10 +590,17 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 	}
 	wl->bcm_bustype = bustype;
 
-	if ((wl->regsva = ioremap_cache(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
+	#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	if ((wl->regsva = ioremap(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
 		WL_ERROR(("wl%d: ioremap() failed\n", unit));
 		goto fail;
 	}
+	#else
+	if ((wl->regsva = ioremap_nocache(dev->base_addr, PCI_BAR0_WINSZ)) == NULL) {
+		WL_ERROR(("wl%d: ioremap() failed\n", unit));
+		goto fail;
+	}
+	#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0) */
 
 	wl->bar1_addr = bar1_addr;
 	wl->bar1_size = bar1_size;
@@ -728,7 +739,7 @@ wl_attach(uint16 vendor, uint16 device, ulong regs,
 		WL_ALL_PASSIVE_ENAB(wl) ?  ", Passive Mode" : "", EPI_VERSION_STR);
 
 #ifdef BCMDBG
-	printf(" (Compiled in " SRCBASE " at " __TIME__ " on " __DATE__ ")");
+	printf(" (Compiled in " SRCBASE);
 #endif 
 	printf("\n");
 
@@ -773,14 +784,19 @@ wl_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_set_master(pdev);
 
 	pci_read_config_dword(pdev, 0x40, &val);
-	if ((val & 0x0000ff00) != 0)
+	if ((val & 0x0000ff00) != 0) {
 		pci_write_config_dword(pdev, 0x40, val & 0xffff00ff);
 		bar1_size = pci_resource_len(pdev, 2);
-		bar1_addr = (uchar *)ioremap_cache(pci_resource_start(pdev, 2),
+		#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+		bar1_addr = (uchar *)ioremap(pci_resource_start(pdev, 2),
 			bar1_size);
+		#else
+		bar1_addr = (uchar *)ioremap_nocache(pci_resource_start(pdev, 2),
+			bar1_size);
+		#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0) */
+	}
 	wl = wl_attach(pdev->vendor, pdev->device, pci_resource_start(pdev, 0), PCI_BUS, pdev,
 		pdev->irq, bar1_addr, bar1_size);
-
 	if (!wl)
 		return -ENODEV;
 
@@ -1663,11 +1679,7 @@ wl_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	}
 
 	WL_LOCK(wl);
-	if (!capable(CAP_NET_ADMIN)) {
-		bcmerror = BCME_EPERM;
-	} else {
-		bcmerror = wlc_ioctl(wl->wlc, ioc.cmd, buf, ioc.len, wlif->wlcif);
-	}
+	bcmerror = wlc_ioctl(wl->wlc, ioc.cmd, buf, ioc.len, wlif->wlcif);
 	WL_UNLOCK(wl);
 
 done1:
@@ -2057,8 +2069,7 @@ wl_osl_pcie_rc(struct wl_info *wl, uint op, int param)
 void
 wl_dump_ver(wl_info_t *wl, struct bcmstrbuf *b)
 {
-	bcm_bprintf(b, "wl%d: %s %s version %s\n", wl->pub->unit,
-		__DATE__, __TIME__, EPI_VERSION_STR);
+	bcm_bprintf(b, "wl%d: version %s\n", wl->pub->unit, EPI_VERSION_STR);
 }
 
 #if defined(BCMDBG)
@@ -2301,16 +2312,19 @@ wl_timer_task(wl_task_t *task)
 	atomic_dec(&t->wl->callbacks);
 }
 
+static void
+wl_timer(
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
-static void
-wl_timer(struct timer_list *tl)
-{
-	wl_timer_t *t = (wl_timer_t *)tl;
+		struct timer_list *tl
 #else
-static void
-wl_timer(ulong data)
-{
-	wl_timer_t *t = (wl_timer_t *)data;
+		ulong data
+#endif
+) {
+	wl_timer_t *t =
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 15, 0)
+		from_timer(t, tl, timer);
+#else
+		(wl_timer_t *)data;
 #endif
 
 	if (!WL_ALL_PASSIVE_ENAB(t->wl))
@@ -2971,8 +2985,7 @@ _wl_add_monitor_if(wl_task_t *task)
 		goto done;
 	}
 
-	ASSERT(strlen(wlif->name) > 0);
-	strncpy(wlif->dev->name, wlif->name, strlen(wlif->name));
+	ASSERT(strncpy(wlif->dev->name, wlif->name, sizeof(wlif->name)) > 0);
 
 	wl->monitor_dev = dev;
 	if (wl->monitor_type == 1)
@@ -3351,19 +3364,20 @@ wl_proc_write(struct file *filp, const char __user *buff, size_t length, loff_t 
 	return length;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
-static const struct proc_ops wl_ops = {
-	.proc_read = wl_proc_read,
-	.proc_write = wl_proc_write,
-	
+static const struct proc_ops wl_fops = {
+	.proc_read	= wl_proc_read,
+	.proc_write	= wl_proc_write,
 };
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
-static const struct file_operations wl_ops = {
+#else
+static const struct file_operations wl_fops = {
 	.owner	= THIS_MODULE,
 	.read	= wl_proc_read,
 	.write	= wl_proc_write,
 };
-#endif
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0) */
 
 static int
 wl_reg_proc_entry(wl_info_t *wl)
@@ -3374,7 +3388,7 @@ wl_reg_proc_entry(wl_info_t *wl)
 	if ((wl->proc_entry = create_proc_entry(tmp, 0644, NULL)) == NULL) {
 		WL_ERROR(("%s: create_proc_entry %s failed\n", __FUNCTION__, tmp));
 #else
-	if ((wl->proc_entry = proc_create_data(tmp, 0644, NULL, &wl_ops, wl)) == NULL) {
+	if ((wl->proc_entry = proc_create_data(tmp, 0644, NULL, &wl_fops, wl)) == NULL) {
 		WL_ERROR(("%s: proc_create_data %s failed\n", __FUNCTION__, tmp));
 #endif
 		ASSERT(0);
