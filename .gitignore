@@ -6,3 +6,4 @@
 wl.mod*
 Module.symvers
 modules.order
+*.d
