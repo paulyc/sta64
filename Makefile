@@ -153,11 +153,9 @@ MDEST_DIR          ?= $(KBASE)/kernel/drivers/net/wireless
 CROSS_TOOLS        = /path/to/tools
 CROSS_KBUILD_DIR   = /path/to/kernel/tree
 
-ifeq ($(ARCH),x86_64)
-	ARCH := amd64
-endif
+ARCH ?= x86_64
 ifeq ($(ARCH),x86)
-	ARCH := amd64
+	ARCH := x86_64
 endif
 
 wl-objs += arch/$(ARCH)/lib/wlc_hybrid.o
